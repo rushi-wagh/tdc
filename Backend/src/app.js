@@ -3,6 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import authRouter from "./routes/auth.routes.js";
 import profileRouter from "./routes/profile.routes.js";
+import matchRouter from "./routes/match.routes.js";
 
 const app = express();
 
@@ -13,8 +14,9 @@ app.use(cors({
   credentials: true,
 }));
 app.use(cookieParser());
-app.use("/api/auth/v1", authRouter);
-app.use("/api/profiles/v1", profileRouter);
+app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/profiles", profileRouter);
+app.use("/api/v1/matches", matchRouter);
 
 export { app };
 export default app;
