@@ -40,12 +40,111 @@ test("returns validated structured explanation from the model", async () => {
   });
 });
 
-test("returns unavailable for malformed model output", async () => {
+test("returns a scoring-context fallback for malformed model output", async () => {
   const service = createCandidateExplanationService({
     chat: { completions: { create: async () => ({ choices: [{ message: { content: "not json" } }] }) } },
   });
 
-  assert.deepEqual(await service(context), { available: false, reason: "MALFORMED_RESPONSE" });
+  assert.deepEqual(await service(context), {
+    available: true,
+    source: "FALLBACK",
+    explanation: {
+      summary: "This is a strong match with a backend compatibility score of 82.5. Review the scoring factors and missing information before sharing it with the customer.",
+      compatibilityPoints: ["Preference matches: customer location preference."],
+      discussionPoints: [],
+      missingInformation: ["candidate income"],
+    },
+  });
+});
+
+test("accepts JSON wrapped in a markdown fence or response text", async () => {
+  const explanation = {
+    summary: "The recommendation has moderate compatibility.",
+    compatibilityPoints: [],
+    discussionPoints: ["Discuss the missing details."],
+    missingInformation: ["income"],
+  };
+  const service = createCandidateExplanationService({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [{ message: { content: `Here is the result:\n\n\`\`\`json\n${JSON.stringify(explanation)}\n\`\`\`` } }],
+        }),
+      },
+    },
+  });
+
+  assert.deepEqual(await service(context), { available: true, explanation });
+});
+
+test("accepts text content returned as a provider object", async () => {
+  const explanation = {
+    summary: "The recommendation has moderate compatibility.",
+    compatibilityPoints: [],
+    discussionPoints: [],
+    missingInformation: ["income"],
+  };
+  const service = createCandidateExplanationService({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [{ message: { content: { text: JSON.stringify(explanation) } } }],
+        }),
+      },
+    },
+  });
+
+  assert.deepEqual(await service(context), { available: true, explanation });
+});
+
+test("removes empty items from model response lists", async () => {
+  const service = createCandidateExplanationService({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [{ message: { content: JSON.stringify({
+            summary: "The score is moderate.",
+            compatibilityPoints: ["Confirmed alignment", ""],
+            discussionPoints: ["", "Discuss expectations"],
+            missingInformation: [""],
+          }) } }],
+        }),
+      },
+    },
+  });
+
+  const result = await service(context);
+  assert.deepEqual(result.explanation, {
+    summary: "The score is moderate.",
+    compatibilityPoints: ["Confirmed alignment"],
+    discussionPoints: ["Discuss expectations"],
+    missingInformation: [],
+  });
+});
+
+test("normalizes structured evidence items from the provider", async () => {
+  const service = createCandidateExplanationService({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [{ message: { content: JSON.stringify({
+            summary: "The score is moderate.",
+            compatibilityPoints: [{ evidence: "Family goals score 75/100", reason: "Strong alignment" }],
+            discussionPoints: [{ topic: "Religion", question: "Discuss expectations" }],
+            missingInformation: [],
+          }) } }],
+        }),
+      },
+    },
+  });
+
+  const result = await service(context);
+  assert.deepEqual(result.explanation, {
+    summary: "The score is moderate.",
+    compatibilityPoints: ["Family goals score 75/100: Strong alignment"],
+    discussionPoints: ["Religion: Discuss expectations"],
+    missingInformation: [],
+  });
 });
 
 test("returns unavailable for missing key and provider errors", async () => {
