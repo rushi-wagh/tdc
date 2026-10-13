@@ -6,11 +6,12 @@ import profileRouter from "./routes/profile.routes.js";
 import matchRouter from "./routes/match.routes.js";
 
 const app = express();
+const frontendOrigin = (process.env.FRONTEND_URL || "http://localhost:5173").trim().replace(/\/+$/, "");
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
-  origin: process.env.FRONTEND_URL || true,
+  origin: frontendOrigin,
   credentials: true,
 }));
 app.use(cookieParser());

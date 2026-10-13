@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "node --test test/match.controller.test.js test/candidate-explanation.service.test.js test/profile.notes.test.js",
+    "test": "node --test test/match.controller.test.js test/candidate-explanation.service.test.js test/profile.notes.test.js test/auth.controller.test.js",
     "start": "node src/index.js",
     "dev": "nodemon src/index.js"
   },

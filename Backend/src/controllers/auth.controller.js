@@ -10,6 +10,17 @@ const getSafeUser = (user) => ({
   role: user.role,
 });
 
+const getAuthCookieOptions = () => {
+  const isCrossSiteDeployment =
+    process.env.NODE_ENV === "production" || process.env.FRONTEND_URL?.startsWith("https://");
+
+  return {
+    httpOnly: true,
+    secure: isCrossSiteDeployment,
+    sameSite: isCrossSiteDeployment ? "none" : "lax",
+  };
+};
+
 const login = async (req, res) => {
   const email =
     typeof req.body?.email === "string"
@@ -50,14 +61,8 @@ const login = async (req, res) => {
   const token = jwt.sign({ userId: safeUser.id }, JWT_SECRET, {
     expiresIn: JWT_EXPIRY,
   });
-  const cookieOptions = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-  };
-
   return res
-  .cookie("token", token, cookieOptions)
+  .cookie("token", token, getAuthCookieOptions())
   .status(200).json({
     success: true,
     message: "Login successful",
@@ -67,4 +72,4 @@ const login = async (req, res) => {
   });
 };
 
-export {login};
+export { getAuthCookieOptions, login };
