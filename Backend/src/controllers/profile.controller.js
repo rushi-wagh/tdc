@@ -5,6 +5,8 @@ const defaultLimit = 20;
 const maxLimit = 100;
 const allowedSortFields = new Set(["name", "lastUpdated"]);
 const allowedSortOrders = new Set(["asc", "desc"]);
+const maxNoteLength = 2000;
+const noteTypes = new Set(["CALL", "MEETING"]);
 
 const parsePositiveInteger = (value, fallback) => {
   if (value === undefined) {
@@ -116,5 +118,117 @@ const getDashboardProfiles = async (req, res) => {
   });
 };
 
-export { getDashboardProfiles };
+const requireMatchmaker = (req, res) => {
+  if (req.user.role !== "MATCHMAKER") {
+    res.status(403).json({
+      success: false,
+      message: "Matchmaker access required",
+    });
+    return false;
+  }
+
+  return true;
+};
+
+const getNoteInput = (body = {}) => {
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  const noteType = typeof body.noteType === "string" ? body.noteType.trim().toUpperCase() : "";
+
+  if (!text) {
+    return { error: "Note text is required" };
+  }
+
+  if (text.length > maxNoteLength) {
+    return { error: `Note cannot exceed ${maxNoteLength} characters` };
+  }
+
+  if (!noteTypes.has(noteType)) {
+    return { error: "noteType must be CALL or MEETING" };
+  }
+
+  return { text, noteType };
+};
+
+const formatNote = (note) => ({
+  text: note.text,
+  noteType: note.noteType,
+  createdAt: note.createdAt,
+  author: note.author
+    ? {
+        id: note.author._id?.toString() || note.author.toString(),
+        name: note.author.name,
+        email: note.author.email,
+        role: note.author.role,
+      }
+    : null,
+});
+
+const getProfileNotes = async (req, res) => {
+  if (!requireMatchmaker(req, res)) {
+    return;
+  }
+
+  try {
+    const profile = await Profile.findOne({
+      profileId: req.params.profileId,
+      assignedMatchmaker: req.user.id,
+    })
+      .select("notes")
+      .populate("notes.author", "name email role")
+      .lean();
+
+    if (!profile) {
+      return res.status(404).json({ success: false, message: "Client profile not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: [...(profile.notes || [])].reverse().map(formatNote),
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Unable to load profile notes" });
+  }
+};
+
+const createProfileNote = async (req, res) => {
+  if (!requireMatchmaker(req, res)) {
+    return;
+  }
+
+  const noteInput = getNoteInput(req.body);
+  if (noteInput.error) {
+    return res.status(400).json({ success: false, message: noteInput.error });
+  }
+
+  try {
+    const profile = await Profile.findOne({
+      profileId: req.params.profileId,
+      assignedMatchmaker: req.user.id,
+    });
+
+    if (!profile) {
+      return res.status(404).json({ success: false, message: "Client profile not found" });
+    }
+
+    profile.notes.push({
+      ...noteInput,
+      author: req.user.id,
+    });
+    await profile.save();
+    await profile.populate("notes.author", "name email role");
+
+    return res.status(201).json({
+      success: true,
+      data: formatNote(profile.notes[profile.notes.length - 1]),
+    });
+  } catch (error) {
+    if (error?.name === "ValidationError") {
+      return res.status(400).json({ success: false, message: "Invalid profile note" });
+    }
+
+    return res.status(500).json({ success: false, message: "Unable to create profile note" });
+  }
+};
+
+export { createProfileNote, getDashboardProfiles, getNoteInput, getProfileNotes };
 export default getDashboardProfiles;

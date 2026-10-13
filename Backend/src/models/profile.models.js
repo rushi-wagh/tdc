@@ -74,6 +74,12 @@ const noteSchema = new mongoose.Schema(
       ref: "User",
       required: [true, "Note author is required"],
     },
+    noteType: {
+      type: String,
+      enum: ["CALL", "MEETING"],
+      required: [true, "Note type is required"],
+      default: "CALL",
+    },
     createdAt: {
       type: Date,
       default: Date.now,

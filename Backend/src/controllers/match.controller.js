@@ -1,9 +1,10 @@
 import Profile from "../models/profile.models.js";
+import { generateCandidateExplanation } from "../services/candidate-explanation.service.js";
 
 const defaultLimit = 10;
 const maxLimit = 50;
 const recommendationThresholds = {
-  strong: 65,
+  strong: 60,
   potential: 40,
 };
 const weights = {
@@ -152,10 +153,7 @@ const getMatchQuality = (score) => {
   return null;
 };
 
-const isEligibleCandidate = (customer, candidate, oppositeGender, seenProfileIds) =>
-  candidate._id.toString() !== customer._id.toString() &&
-  normalizeGender(candidate.gender) === oppositeGender &&
-  !seenProfileIds.has(candidate.profileId);
+
 
 const getQualifyingSuggestions = (suggestions, limit) => suggestions
   .filter((suggestion) => suggestion.matchQuality)
@@ -303,6 +301,54 @@ const scoreCandidate = (customer, candidate) => {
   };
 };
 
+
+const isEligibleCandidate = (
+  customer,
+  candidate,
+  oppositeGender,
+  seenProfileIds
+) => {
+  // General eligibility checks
+  if (
+    candidate._id.toString() === customer._id.toString() ||
+    normalizeGender(candidate.gender) !== oppositeGender ||
+    seenProfileIds.has(candidate.profileId)
+  ) {
+    return false;
+  }
+
+  // Male customer: female candidate must satisfy ALL three rules
+  if (normalizeGender(customer.gender) === "male") {
+    const customerAge = calculateAge(customer.dateOfBirth);
+    const candidateAge = calculateAge(candidate.dateOfBirth);
+
+    // Missing data means the candidate cannot qualify
+    if (
+      customerAge == null ||
+      candidateAge == null ||
+      customer.income == null ||
+      candidate.income == null ||
+      customer.height == null ||
+      candidate.height == null
+    ) {
+      return false;
+    }
+
+    // Strictly younger, lower income, and shorter
+    if (
+      candidateAge >= customerAge ||
+      candidate.income >= customer.income ||
+      candidate.height >= customer.height
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+
+
 const getSuggestions = async (req, res) => {
   if (req.user.role !== "MATCHMAKER") {
     return res.status(403).json({ success: false, message: "Matchmaker access required" });
@@ -383,5 +429,88 @@ const getSuggestions = async (req, res) => {
   }
 };
 
-export { getMatchQuality, getQualifyingSuggestions, getSuggestions, isEligibleCandidate, scoreCandidate };
+const getCandidateExplanation = async (req, res) => {
+  if (req.user.role !== "MATCHMAKER") {
+    return res.status(403).json({ success: false, message: "Matchmaker access required" });
+  }
+
+  const { profileId, candidateProfileId } = req.params;
+  if (!profileId || !candidateProfileId) {
+    return res.status(400).json({ success: false, message: "Customer and candidate profile IDs are required" });
+  }
+
+  try {
+    const customer = await Profile.findOne({ profileId, assignedMatchmaker: req.user.id }).lean();
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer profile not found" });
+    }
+
+    const candidate = await Profile.findOne({ profileId: candidateProfileId })
+      .select("profileId firstName lastName gender dateOfBirth city country income height maritalStatus religion caste degree designation wantKids openToRelocate openToPets foodHabits smokingHabits alcoholHabits partnerPreferences journeyStage")
+      .lean();
+    if (!candidate) {
+      return res.status(404).json({ success: false, message: "Candidate profile not found" });
+    }
+
+    const customerGender = normalizeGender(customer.gender);
+    const oppositeGender = customerGender === "male" ? "female" : "male";
+    if (!customerGender || !isEligibleCandidate(customer, candidate, oppositeGender, new Set())) {
+      return res.status(404).json({ success: false, message: "Candidate is not an eligible recommendation" });
+    }
+
+    const scoring = scoreCandidate(customer, candidate);
+    const matchQuality = getMatchQuality(scoring.totalScore);
+    if (!matchQuality) {
+      return res.status(404).json({ success: false, message: "Candidate does not meet recommendation threshold" });
+    }
+
+    const aiResult = await generateCandidateExplanation({
+      candidate: {
+        profileId: candidate.profileId,
+        age: scoring.candidateAge,
+        gender: candidate.gender,
+        city: candidate.city,
+        country: candidate.country,
+        maritalStatus: candidate.maritalStatus,
+        religion: candidate.religion,
+        caste: candidate.caste,
+        degree: candidate.degree,
+        designation: candidate.designation,
+        wantKids: candidate.wantKids,
+        openToRelocate: candidate.openToRelocate,
+        openToPets: candidate.openToPets,
+        foodHabits: candidate.foodHabits,
+        smokingHabits: candidate.smokingHabits,
+        alcoholHabits: candidate.alcoholHabits,
+      },
+      score: scoring.totalScore,
+      matchQuality,
+      scoreBreakdown: scoring.scoreBreakdown,
+      preferenceComparisons: scoring.explanations,
+      negativeComparisons: scoring.negativeExplanations,
+      missingInformation: scoring.missingInformation,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        available: aiResult.available,
+        ...(aiResult.available ? { explanation: aiResult.explanation } : { reason: aiResult.reason }),
+        score: scoring.totalScore,
+        matchQuality,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Unable to load candidate explanation" });
+  }
+};
+
+export {
+  getCandidateExplanation,
+  getMatchQuality,
+  getQualifyingSuggestions,
+  getSuggestions,
+  isEligibleCandidate,
+  scoreCandidate,
+};
 export default getSuggestions;
