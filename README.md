@@ -41,25 +41,47 @@ Backend
   explanations
 The frontend and backend are separate applications. Check each
 application's package.json for exact scripts and dependency versions.
-Matching approach
-The backend owns candidate eligibility, scoring, recommendation
-filtering, and ranking. The scoring model uses these dimensions:
-  Dimension                    Weight
-  Family goals                    25%
-  Location and relocation         20%
-  Values and life goals           20%
-  Profession and education        15%
-  Lifestyle                       10%
-  Other factors                   10%
-Current configured quality thresholds: - STRONG: score ≥ 60 -
-POTENTIAL: score ≥ 40 and < 60 - Scores below 40 are excluded from
-qualifying recommendations.
-The engine applies eligibility checks such as excluding the customer's
-own profile and considering opposite-gender candidates. ANY
-preferences mean no preference. Missing information should be treated as
-unknown rather than automatically counted as a mismatch.
-The frontend presents backend results and does not independently
-recalculate compatibility.
+Matching algorithm
+The matching engine is deterministic and rule-based. It first builds an eligible candidate pool, then compares the customer's preferences with each candidate's profile, calculates an explainable score, and returns qualifying recommendations. The frontend displays the backend's results and does not calculate or change scores.
+1. Candidate eligibility
+- Only profiles assigned to the authenticated matchmaker can be accessed through the profile workflow.
+- Recommendations exclude the customer's own profile.
+- The candidate pool uses opposite-gender profiles for this assignment.
+- Duplicate candidates should not appear more than once in a recommendation list.
+- The backend applies the configured qualification thresholds before returning recommendations.
+2. Gender-specific compatibility
+The assignment calls for different compatibility considerations depending on the customer:
+- Male customer: Evaluate whether the woman is younger, earns less, and is shorter than the male customer, along with compatibility on views about having children. These comparisons should be checked against the actual profile values and preference data; do not infer a value when it is missing.
+- Female customer: Evaluate compatibility thoughtfully across profession and education, values and life goals, location and relocation preferences, family goals, and lifestyle. The implementation should not assume that every factor has the same importance for every customer.
+The direction of the age, income, and height comparisons is intentional for the male-customer rule specified in the assignment. These criteria should not be silently generalized into identical hard rules for every customer type. Where a comparison is intended to be a hard eligibility rule, candidates that fail it should be excluded; where it is a weighted compatibility factor, it should affect the score instead. Keep this distinction explicit in the implementation and when explaining a recommendation.
+3. Weighted score
+The current scoring configuration distributes compatibility across these dimensions:
+Dimension	Weight
+Family goals	25%
+Location and relocation	20%
+Values and life goals	20%
+Profession and education	15%
+Lifestyle	10%
+Other factors	10%
+Total	100%
+
+
+The engine compares available profile data and preferences within these dimensions and provides a score breakdown so the matchmaker can understand the result.
+4. Match-quality thresholds
+The current configured thresholds are:
+- STRONG: score ≥ 60
+- POTENTIAL: score ≥ 40 and < 60
+- Below 40: excluded from qualifying recommendations.
+These thresholds are applied by the backend. The frontend must not independently recalculate the score, alter ranking, or promote a candidate that the backend filtered out.
+5. Preferences and missing information
+- ANY means the customer has no specific preference for that field; it should not create a mismatch.
+- Missing or unknown data is not automatically a negative match. The engine should distinguish a confirmed incompatibility from information that has not been provided.
+- Sensitive fields such as religion and caste should be evaluated only when relevant preferences and data are explicitly available; missing values must not be treated as incompatibilities by default.
+- Views on children and other Yes/No/Maybe preferences should be compared using the actual stored values rather than guessed.
+- The score breakdown and AI explanation should agree with the same underlying comparisons.
+6. AI's role
+NVIDIA NIM is used to generate a structured explanation for a recommendation that the deterministic engine has already produced. The explanation can include a summary, compatibility points, discussion points, and missing information.
+AI does not determine candidate eligibility, calculate the compatibility score, change thresholds, or reorder recommendations. If the AI service is unavailable or returns an invalid response, the recommendation and its backend-generated score should remain available without a fabricated explanation.
 Data and access control
 The seed dataset contains 100 fictional profiles (50 female and 50
 male) distributed across three matchmakers. Profile access is scoped to
