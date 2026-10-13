@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #30252a;
+  background: #fff8f1;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(249, 222, 216, 0.28), rgba(255, 248, 241, 0) 340px),
+    #fff8f1;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(198, 154, 84, 0.45);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .surface {
+    @apply rounded-lg border border-[#eadbd1] bg-white/85 shadow-soft;
+  }
+
+  .field {
+    @apply w-full rounded-md border border-[#dcc9bf] bg-white px-3 py-2.5 text-sm text-ink shadow-sm transition placeholder:text-muted/60 focus:border-gold focus:outline-none focus:ring-4 focus:ring-gold/15;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-burgundy px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-wine disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-[#dcc9bf] bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm transition hover:border-gold hover:text-burgundy disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-semibold text-ink;
+  }
+}

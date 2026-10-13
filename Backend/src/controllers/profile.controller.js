@@ -67,6 +67,7 @@ const getDashboardProfiles = async (req, res) => {
 
   if (search) {
     query.$or = [
+      { profileId: { $regex: search, $options: "i" } },
       { firstName: { $regex: search, $options: "i" } },
       { lastName: { $regex: search, $options: "i" } },
     ];
@@ -86,7 +87,7 @@ const getDashboardProfiles = async (req, res) => {
   const [totalItems, profiles] = await Promise.all([
     Profile.countDocuments(query),
     Profile.find(query)
-      .select("profileId firstName lastName dateOfBirth city maritalStatus journeyStage updatedAt")
+      .select("profileId firstName lastName gender dateOfBirth city maritalStatus journeyStage updatedAt")
       .sort(sort)
       .skip(skip)
       .limit(limit)
@@ -98,6 +99,7 @@ const getDashboardProfiles = async (req, res) => {
     profileId: profile.profileId,
     name: [profile.firstName, profile.lastName].filter(Boolean).join(" "),
     age: calculateAge(profile.dateOfBirth),
+    gender: profile.gender,
     city: profile.city,
     maritalStatus: profile.maritalStatus,
     journeyStage: profile.journeyStage,
@@ -116,6 +118,35 @@ const getDashboardProfiles = async (req, res) => {
       hasPreviousPage: page > 1,
     },
   });
+};
+
+const getProfileDetails = async (req, res) => {
+  if (!requireMatchmaker(req, res)) {
+    return;
+  }
+
+  try {
+    const profile = await Profile.findOne({
+      profileId: req.params.profileId,
+      assignedMatchmaker: req.user.id,
+    })
+      .select("-notes")
+      .lean();
+
+    if (!profile) {
+      return res.status(404).json({ success: false, message: "Client profile not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...profile,
+        age: calculateAge(profile.dateOfBirth),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Unable to load profile details" });
+  }
 };
 
 const requireMatchmaker = (req, res) => {
@@ -230,5 +261,5 @@ const createProfileNote = async (req, res) => {
   }
 };
 
-export { createProfileNote, getDashboardProfiles, getNoteInput, getProfileNotes };
+export { createProfileNote, getDashboardProfiles, getNoteInput, getProfileDetails, getProfileNotes };
 export default getDashboardProfiles;

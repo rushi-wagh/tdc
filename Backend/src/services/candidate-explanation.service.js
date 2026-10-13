@@ -1,7 +1,7 @@
 
 import OpenAI from "openai";
 
-const model = "dots-studio/dots-3-note-preview:free";
+const model = "openrouter/free";
 const requestTimeoutMs = 100000;
 
 const openAIClient = process.env.OPENROUTER_API_KEY
