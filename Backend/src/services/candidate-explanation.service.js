@@ -266,7 +266,6 @@ const createCandidateExplanationService = (client = openAIClient) => {
         explanation,
       };
     } catch (error) {
-      // Avoid logging API keys, full prompts, or profile data.
       console.error("[candidate-explanation] NVIDIA request failed", {
         name: error?.name,
         status: error?.status,
